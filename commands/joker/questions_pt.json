@@ -1,0 +1,12 @@
+[
+  {
+    "text": "Qual é a capital de Portugal?",
+    "options": ["Porto", "Lisboa", "Coimbra", "Braga"],
+    "correct": 1
+  },
+  {
+    "text": "Quem escreveu 'Os Lusíadas'?",
+    "options": ["Eça de Queirós", "Camões", "Pessoa", "Saramago"],
+    "correct": 1
+  }
+]

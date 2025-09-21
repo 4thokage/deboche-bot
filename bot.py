@@ -1,37 +1,31 @@
-# bot.py
-import os, random, time
+import logging
 import discord
 from discord.ext import commands
+from discord import app_commands
+from cogwatch import Watcher
+from config import GUILD_ID
 
-TOKEN = os.getenv("DISCORD_TOKEN")
-bot = commands.Bot(command_prefix="/")
+class DebocheBot(commands.Bot):
+    def __init__(self, db, **kwargs):
+        super().__init__(**kwargs)
+        self.db = db
+        self.logger = logging.getLogger("DebocheBot")
 
-cooldowns = {}  # { (user_id, command): timestamp }
+    async def setup_hook(self):
+        # Load Jishaku for debugging
+        await self.load_extension("jishaku")
 
-COOLDOWN_SECONDS = 30
+        # Start watcher
+        watcher = Watcher(self, path="commands", preload=True, debug=False)
+        await watcher.start()
 
-def check_cd(user, cmd):
-    now = time.time()
-    key = (user, cmd)
-    if key in cooldowns and now - cooldowns[key] < COOLDOWN_SECONDS:
-        return False, COOLDOWN_SECONDS - (now - cooldowns[key])
-    cooldowns[key] = now
-    return True, 0
+        # Sync commands
+        if GUILD_ID:
+            await self.tree.sync(guild=discord.Object(id=GUILD_ID))
+            self.logger.info(f"Synced slash commands to guild {GUILD_ID}")
+        else:
+            await self.tree.sync()
+            self.logger.info("Synced global slash commands")
 
-@bot.command()
-async def hunt(ctx):
-    ok, left = check_cd(ctx.author.id, "hunt")
-    if not ok:
-        return await ctx.send(f"⏳ Cooldown! Try again in {int(left)}s")
-    monster = random.choice(["Slime", "Wolf", "Boar"])
-    await ctx.send(f"{ctx.author.mention} went hunting and found a **{monster}**!")
-
-@bot.command()
-async def forage(ctx):
-    ok, left = check_cd(ctx.author.id, "forage")
-    if not ok:
-        return await ctx.send(f"⏳ Cooldown! {int(left)}s left.")
-    item = random.choice(["Herb", "Mushroom", "Stick"])
-    await ctx.send(f"You foraged and found a {item} 🌱")
-
-bot.run(TOKEN)
+    async def on_ready(self):
+        self.logger.info(f"Bot ready. Logged in as {self.user}")

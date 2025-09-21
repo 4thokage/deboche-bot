@@ -1,0 +1,13 @@
+[project]
+name = "deboche-bot"
+version = "0.1.0"
+dependencies = [
+  "discord.py>=2.6",
+  "python-dotenv>=1.1",
+  "cogwatch>=3.3",
+  "jishaku>=2.6",
+  "akinator.py>=0.2",
+  "beautifulsoup4>=4.13",
+  "playwright>=1.55",
+  "discord-ui>=5.1",
+]
