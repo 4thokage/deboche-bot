@@ -27,3 +27,15 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -e .
+    - name: Deploy via SSH
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USER }}
+        key: ${{ secrets.VPS_KEY }}
+        script: |
+          cd ./git/deboche-bot
+          git pull
+          python3 -m venv venv
+          venv/bin/pip install -U pip
+          venv/bin/pip install -e .
