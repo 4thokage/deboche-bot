@@ -64,8 +64,8 @@ PERSONALIDADES = {
           ),
           "cor": discord.Color.pink(),
           "emoji": "🍺",
-      },
-    }
+    },
+  }
 
 class IACog(commands.Cog):
     """Conversa com a IA Gemini em diferentes personalidades"""
