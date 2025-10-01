@@ -10,4 +10,6 @@ dependencies = [
   "beautifulsoup4>=4.13",
   "playwright>=1.55",
   "discord-ui>=5.1",
+  "yt-dlp>=2025.9",
+  "PyNaCl>=1.6",
 ]

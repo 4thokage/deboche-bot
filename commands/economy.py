@@ -197,35 +197,5 @@ class Economy(commands.Cog):
 
         await interaction.response.send_message(f"🎰 {' '.join(result)}\n💰 Ganhaste {win} coins!")
 
-    @app_commands.command(
-        name="cenas",
-        description="Vê a queue ou compra algo para entrar nela."
-    )
-    @app_commands.describe(comprar="Texto a associar ao teu nome na queue")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
-    async def cenas(self, interaction: discord.Interaction, comprar: str | None = None):
-        user_id = interaction.user.id
-
-        if comprar:
-            # Adiciona o user + texto à queue
-            self.queue.append((user_id, comprar))
-            return await interaction.response.send_message(
-                f"✅ {interaction.user.mention} adicionou **{comprar}** à queue!"
-            )
-
-        # Mostrar queue
-        if not self.queue:
-            return await interaction.response.send_message("📭 A queue está vazia.")
-
-        linhas = []
-        for idx, (uid, item) in enumerate(self.queue, start=1):
-            linhas.append(f"{idx}. <@{uid}> — {item}")
-
-        embed = discord.Embed(
-            title="📜 Queue atual",
-            description="\n".join(linhas),
-            color=discord.Color.blue()
-        )
-        await interaction.response.send_message(embed=embed)
 async def setup(bot):
     await bot.add_cog(Economy(bot))

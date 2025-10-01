@@ -12,6 +12,8 @@ GEMINI_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "gemini-2.0-flash:generateContent"
 )
+GROQ_KEY = os.getenv("GROQ_API_KEY")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # --- Personalidades disponíveis ---
 PERSONALIDADES = {
@@ -125,6 +127,66 @@ class IACog(commands.Cog):
         
         paginator = EmbedPaginator(reply, title=title, color=dados['cor'])
         await paginator.start(interaction)  # For slash commands
+        
+    @app_commands.command(
+        name="groq",
+        description="Pergunta algo à IA Groq (texto com pesquisa se necessário)"
+    )
+    @app_commands.describe(
+        prompt="Mensagem ou pergunta para a Groq AI",
+        search_url="Opcional: URL para pesquisar ou resumir conteúdo"
+    )
+    @app_commands.guilds(discord.Object(GUILD_ID))
+    async def groq(
+        self,
+        interaction: discord.Interaction,
+        prompt: str,
+        search_url: str | None = None
+    ):
+        await interaction.response.defer(thinking=True)
+
+        if not GROQ_KEY:
+            return await interaction.followup.send("❌ GROQ_API_KEY não está configurada.")
+
+        # Se o usuário forneceu URL, faz fetch do conteúdo
+        if search_url:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(search_url) as resp:
+                        text = await resp.text()
+                prompt += f"\n\nConteúdo do site {search_url}:\n{text[:2000]}..."  # limita a 2k chars
+            except Exception as e:
+                await interaction.followup.send(f"❌ Falha ao acessar {search_url}: {e}")
+
+        payload = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.7,
+            "max_tokens": 1024
+        }
+
+        headers = {
+            "Authorization": f"Bearer {GROQ_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(GROQ_URL, headers=headers, json=payload) as resp:
+                    if resp.status != 200:
+                        text = await resp.text()
+                        return await interaction.followup.send(f"❌ Erro {resp.status} da API: {text[:400]}")
+                    data = await resp.json()
+        except Exception as e:
+            return await interaction.followup.send(f"❌ Falha na requisição: `{e}`")
+
+        try:
+            reply = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError):
+            reply = "⚠️ A IA não retornou resposta compreensível."
+
+        paginator = EmbedPaginator(reply, title="🤖 Groq AI responde", color=0x1ABC9C)
+        await paginator.start(interaction)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(IACog(bot))
