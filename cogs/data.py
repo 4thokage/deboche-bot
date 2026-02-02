@@ -150,42 +150,74 @@ class Data(commands.Cog):
 
     @app_commands.command(
         name="wiki",
-        description="Busca um artigo na Wikipedia em inglês"
+        description="Busca informações de um item, NPC ou boss da OSRS Wiki."
     )
-    @app_commands.describe(termo="O termo que queres pesquisar na Wikipedia")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
-    async def wiki(self, interaction: discord.Interaction, termo: str):
-        await interaction.response.defer()
+    @app_commands.describe(
+        query="Nome do item, NPC ou boss."
+    )
+    @app_commands.guilds(discord.Object(id=int(os.getenv("GUILD_ID"))))
+    async def wiki(self, interaction: discord.Interaction, query: str):
+        await interaction.response.defer(thinking=True)
 
-        # Formata o termo para URL
-        termo_formatado = termo.replace(" ", "_")
+        url = "https://oldschool.runescape.wiki/api.php"
+        params = {
+            "action": "query",
+            "format": "json",
+            "titles": query.replace(" ", "_"),
+            "prop": "extracts|pageimages",
+            "exintro": "1",      # <-- changed from True to "1"
+            "explaintext": "1",  # <-- changed from True to "1"
+            "piprop": "original"
+        }
 
         try:
-            async with self.bot.session.get(
-                f"https://en.wikipedia.org/api/rest_v1/page/summary/{termo_formatado}"
-            ) as resp:
-                if resp.status == 404:
-                    return await interaction.followup.send(f"❌ Nenhum artigo encontrado para `{termo}`")
-                data = await resp.json()
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params) as resp:
+                    data = await resp.json()
 
-                titulo = data.get("title", termo)
-                descricao = data.get("extract", "Sem resumo disponível.")
-                url = data.get("content_urls", {}).get("desktop", {}).get("page", f"https://en.wikipedia.org/wiki/{termo_formatado}")
-                imagem = data.get("thumbnail", {}).get("source")
+            print(data)
+            pages = data["query"]["pages"]
+            page = next(iter(pages.values()))
+            if "missing" in page:
+                return await interaction.followup.send(f"❌ Página **{query}** não encontrada na OSRS Wiki.")
 
-                embed = discord.Embed(
-                    title=titulo,
-                    description=descricao,
-                    url=url,
-                    color=discord.Color.blue()
-                )
-                if imagem:
-                    embed.set_thumbnail(url=imagem)
-                embed.set_footer(text="Fonte: Wikipedia")
+            title = page["title"]
+            extract = page.get("extract", "Sem resumo disponível.")
+            image_url = page.get("original", {}).get("source")
 
-                await interaction.followup.send(embed=embed)
+            embed = discord.Embed(title=title, description=extract, color=discord.Color.green())
+            if image_url:
+                embed.set_thumbnail(url=image_url)
+
+            await interaction.followup.send(embed=embed)
+
         except Exception as e:
-            await interaction.followup.send(f"🚨 Algo correu mal: {e}")
+            await interaction.followup.send(f"❌ Erro ao consultar OSRS Wiki: `{e}`")
+
+    @commands.hybrid_command(name="wiki")
+    async def wiki_text(self, ctx: commands.Context, *, query: str):
+        class DummyInteraction:
+            def __init__(self, ctx):
+                self.ctx = ctx
+
+            @property
+            def response(self):
+                return self
+
+            async def defer(self, thinking=True):
+                await self.ctx.send("⏳ Buscando na OSRS Wiki...")
+
+            async def followup(self, send=None, **kwargs):
+                if send:
+                    await self.ctx.send(send)
+                elif "content" in kwargs:
+                    await self.ctx.send(kwargs["content"])
+
+            async def followup_send(self, content):
+                await self.ctx.send(content)
+
+        fake_interaction = DummyInteraction(ctx)
+        await self.wiki.__func__(self, fake_interaction, query)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Data(bot))

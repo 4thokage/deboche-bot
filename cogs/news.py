@@ -100,7 +100,7 @@ class News(commands.Cog):
             await interaction.followup.send(f"❌ Erro ao processar notícias: `{e}`")
 
 
-    @commands.command(name="mirante")
+    @commands.hybrid_command(name="mirante")
     async def mirante_text(self, ctx: commands.Context, n_resultados: int = 5, categoria: str = "opiniao"):
         """Permite usar o comando via texto, ex: !mirante 2 cultura-e-lazer"""
         # Criamos um "fake interaction" para reaproveitar o código do slash

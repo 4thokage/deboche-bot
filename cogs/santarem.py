@@ -83,6 +83,7 @@ class Santarem(commands.Cog):
                 value=f"🕒 {start_dt}\n🔗 [Link]({url_full})" if url_full else f"🕒 {start_dt}",
                 inline=False
             )
+            
 
         await interaction.response.send_message(embed=embed)
 

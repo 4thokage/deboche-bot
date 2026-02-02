@@ -1,25 +1,352 @@
+import json
 import logging
+import os
+import platform
+import random
+import sys
+
+import asyncio
+import signal
+import aiosqlite
 import discord
-from discord import Intents
-from bot import DebocheBot
-from db import Database
+from discord.ext import commands, tasks
+from discord.ext.commands import Context
+from dotenv import load_dotenv
+from cogwatch import watch
+
+from database import DatabaseManager
 from config import TOKEN
+from config import PREFIX
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-)
 
-intents = Intents.default()
+load_dotenv()
+
+"""	
+Setup bot intents (events restrictions)
+For more information about intents, please go to the following websites:
+https://discordpy.readthedocs.io/en/latest/intents.html
+https://discordpy.readthedocs.io/en/latest/intents.html#privileged-intents
+
+
+Default Intents:
+intents.bans = True
+intents.dm_messages = True
+intents.dm_reactions = True
+intents.dm_typing = True
+intents.emojis = True
+intents.emojis_and_stickers = True
+intents.guild_messages = True
+intents.guild_reactions = True
+intents.guild_scheduled_events = True
+intents.guild_typing = True
+intents.guilds = True
+intents.integrations = True
+intents.invites = True
+intents.messages = True # `message_content` is required to get the content of the messages
+intents.reactions = True
+intents.typing = True
+intents.voice_states = True
+intents.webhooks = True
+
+Privileged Intents (Needs to be enabled on developer portal of Discord), please use them only if you need them:
+intents.members = True
 intents.message_content = True
-# intents.guilds = True
-intents.messages = True
+intents.presences = True
+"""
 
-# Instantiate database
-db = Database()
+intents = discord.Intents.default()
 
-# Instantiate bot
-bot = DebocheBot(db=db, command_prefix="!", intents=intents)
+"""
+Uncomment this if you want to use prefix (normal) commands.
+It is recommended to use slash commands and therefore not use prefix commands.
+
+If you want to use prefix commands, make sure to also enable the intent below in the Discord developer portal.
+"""
+intents.message_content = True
+intents.presences = True
+intents.members = True
+
+# Setup both of the loggers
+class LoggingFormatter(logging.Formatter):
+    # Colors
+    black = "\x1b[30m"
+    red = "\x1b[31m"
+    green = "\x1b[32m"
+    yellow = "\x1b[33m"
+    blue = "\x1b[34m"
+    gray = "\x1b[38m"
+    # Styles
+    reset = "\x1b[0m"
+    bold = "\x1b[1m"
+
+    COLORS = {
+        logging.DEBUG: gray + bold,
+        logging.INFO: blue + bold,
+        logging.WARNING: yellow + bold,
+        logging.ERROR: red,
+        logging.CRITICAL: red + bold,
+    }
+
+    def format(self, record):
+        log_color = self.COLORS[record.levelno]
+        format = "(black){asctime}(reset) (levelcolor){levelname:<8}(reset) (green){name}(reset) {message}"
+        format = format.replace("(black)", self.black + self.bold)
+        format = format.replace("(reset)", self.reset)
+        format = format.replace("(levelcolor)", log_color)
+        format = format.replace("(green)", self.green + self.bold)
+        formatter = logging.Formatter(format, "%Y-%m-%d %H:%M:%S", style="{")
+        return formatter.format(record)
+
+
+logger = logging.getLogger("discord_bot")
+logger.setLevel(logging.INFO)
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(LoggingFormatter())
+# File handler
+file_handler = logging.FileHandler(filename="discord.log", encoding="utf-8", mode="w")
+file_handler_formatter = logging.Formatter(
+    "[{asctime}] [{levelname:<8}] {name}: {message}", "%Y-%m-%d %H:%M:%S", style="{"
+)
+file_handler.setFormatter(file_handler_formatter)
+
+# Add the handlers
+logger.addHandler(console_handler)
+logger.addHandler(file_handler)
+
+
+class DiscordBot(commands.Bot):
+    def __init__(self) -> None:
+        super().__init__(
+            command_prefix=commands.when_mentioned_or(PREFIX),
+            intents=intents,
+            help_command=None,
+        )
+        """
+        This creates custom bot variables so that we can access these variables in cogs more easily.
+
+        For example, The logger is available using the following code:
+        - self.logger # In this class
+        - bot.logger # In this file
+        - self.bot.logger # In cogs
+        """
+        self.logger = logger
+        self.database = None
+        self.bot_prefix = PREFIX
+
+    async def init_db(self) -> None:
+        db_path = f"{os.path.realpath(os.path.dirname(__file__))}/database/database.db"
+        schema_path = f"{os.path.realpath(os.path.dirname(__file__))}/database/schema.sql"
+
+        async with aiosqlite.connect(db_path) as db:
+            with open(schema_path, encoding="utf-8") as file:
+                await db.executescript(file.read())
+            await db.commit()
+
+    @watch(path='cogs', preload=True)
+    async def on_ready(self):
+        print('Bot ready.')
+        
+    async def on_presence_update(self, before: discord.Member, after: discord.Member):
+        self.logger.info(f"PRESENCE UPDATE: {after}")
+        if not after.guild:
+            return
+
+        user_id = after.id
+        guild_id = after.guild.id
+
+        def get_game(member):
+            for activity in member.activities:
+                if activity.type == discord.ActivityType.playing:
+                    return activity.name
+            return None
+
+        before_game = get_game(before)
+        after_game = get_game(after)
+
+        now = int(time.time())
+
+        # Started playing
+        if not before_game and after_game:
+            self.active_sessions[user_id] = {
+                "game": after_game,
+                "started_at": now,
+                "guild_id": guild_id,
+            }
+
+        # Stopped playing or changed game
+        if before_game and (before_game != after_game):
+            session = self.active_sessions.pop(user_id, None)
+            if session:
+                await self.bot.database.add_gaming_session(
+                    user_id=user_id,
+                    guild_id=guild_id,
+                    game_name=session["game"],
+                    started_at=session["started_at"],
+                    ended_at=now,
+                )
+
+            # Started a new game immediately
+            if after_game:
+                self.active_sessions[user_id] = {
+                    "game": after_game,
+                    "started_at": now,
+                    "guild_id": guild_id,
+                }
+
+    @tasks.loop(minutes=4.0)
+    async def status_task(self) -> None:
+        estados = [
+            "Olá 👋",
+            "Sou um bot 🤖",
+            "A fazer cenas fixes 😎",
+        ]
+        await self.change_presence(
+            activity=discord.Game(random.choice(estados))
+        )
+
+    @status_task.before_loop
+    async def before_status_task(self) -> None:
+        """
+        Before starting the status changing task, we make sure the bot is ready
+        """
+        await self.wait_until_ready()
+
+    async def setup_hook(self) -> None:
+        """
+        This will just be executed when the bot starts the first time.
+        """
+        self.logger.info(f"Logged in as {self.user.name}")
+        self.logger.info(f"discord.py API version: {discord.__version__}")
+        self.logger.info(f"Python version: {platform.python_version()}")
+        self.logger.info(
+            f"Running on: {platform.system()} {platform.release()} ({os.name})"
+        )
+        self.logger.info("-------------------")
+        await self.init_db()
+        # await self.load_cogs()
+        
+        for guild in self.guilds:
+            await guild.chunk()
+
+        try:
+            await self.load_extension("jishaku")
+            self.logger.info("Loaded extension 'jishaku'")
+        except Exception as e:
+            self.logger.warning(f"Não foi possível carregar jishaku: {e}")
+            
+        
+        self.database = DatabaseManager(
+            connection=await aiosqlite.connect(
+                f"{os.path.realpath(os.path.dirname(__file__))}/database/database.db"
+            )
+        )
+        
+        self.status_task.start()
+
+    async def on_message(self, message):
+        if message.author.bot:
+            return
+
+        await self.process_commands(message)
+
+    async def on_command_completion(self, context: Context) -> None:
+        """
+        The code in this event is executed every time a normal command has been *successfully* executed.
+
+        :param context: The context of the command that has been executed.
+        """
+        full_command_name = context.command.qualified_name
+        split = full_command_name.split(" ")
+        executed_command = str(split[0])
+        await self.database.increment_commands_count(context.author.id)
+        if context.guild is not None:
+            self.logger.info(
+                f"Executed {executed_command} command in {context.guild.name} (ID: {context.guild.id}) by {context.author} (ID: {context.author.id})"
+            )
+        else:
+            self.logger.info(
+                f"Executed {executed_command} command by {context.author} (ID: {context.author.id}) in DMs"
+            )
+        
+    async def on_command_error(self, context: Context, error) -> None:
+        """
+        The code in this event is executed every time a normal valid command catches an error.
+
+        :param context: The context of the normal command that failed executing.
+        :param error: The error that has been faced.
+        """
+        if isinstance(error, commands.CommandOnCooldown):
+            minutes, seconds = divmod(error.retry_after, 60)
+            hours, minutes = divmod(minutes, 60)
+            hours = hours % 24
+            embed = discord.Embed(
+                description=f"**Please slow down** - You can use this command again in {f'{round(hours)} hours' if round(hours) > 0 else ''} {f'{round(minutes)} minutes' if round(minutes) > 0 else ''} {f'{round(seconds)} seconds' if round(seconds) > 0 else ''}.",
+                color=0xE02B2B,
+            )
+            await context.send(embed=embed)
+        elif isinstance(error, commands.NotOwner):
+            embed = discord.Embed(
+                description="You are not the owner of the bot!", color=0xE02B2B
+            )
+            await context.send(embed=embed)
+            if context.guild:
+                self.logger.warning(
+                    f"{context.author} (ID: {context.author.id}) tried to execute an owner only command in the guild {context.guild.name} (ID: {context.guild.id}), but the user is not an owner of the bot."
+                )
+            else:
+                self.logger.warning(
+                    f"{context.author} (ID: {context.author.id}) tried to execute an owner only command in the bot's DMs, but the user is not an owner of the bot."
+                )
+        elif isinstance(error, commands.MissingPermissions):
+            embed = discord.Embed(
+                description="You are missing the permission(s) `"
+                + ", ".join(error.missing_permissions)
+                + "` to execute this command!",
+                color=0xE02B2B,
+            )
+            await context.send(embed=embed)
+        elif isinstance(error, commands.BotMissingPermissions):
+            embed = discord.Embed(
+                description="I am missing the permission(s) `"
+                + ", ".join(error.missing_permissions)
+                + "` to fully perform this command!",
+                color=0xE02B2B,
+            )
+            await context.send(embed=embed)
+        elif isinstance(error, commands.MissingRequiredArgument):
+            embed = discord.Embed(
+                title="Error!",
+                # We need to capitalize because the command arguments have no capital letter in the code and they are the first word in the error message.
+                description=str(error).capitalize(),
+                color=0xE02B2B,
+            )
+            await context.send(embed=embed)
+        else:
+            raise error
+        
+    async def close(self):
+        self.logger.info("A encerrar bot...")
+
+        if self.status_task.is_running():
+            self.status_task.cancel()
+
+        if self.database and self.database.connection:
+            await self.database.connection.close()
+
+        await super().close()
+
+async def main():
+    bot = DiscordBot()
+
+    try:
+        await bot.start(TOKEN)
+    except KeyboardInterrupt:
+        print("Ctrl+C recebido — a encerrar bot...")
+    finally:
+        await bot.close()
+
 
 if __name__ == "__main__":
-    bot.run(TOKEN)
+    asyncio.run(main())

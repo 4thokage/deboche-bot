@@ -28,9 +28,9 @@ class ProfileView(discord.ui.View):
 
     def __init__(self, db, discord_id: str, modal_class):
         super().__init__(timeout=None)
-        self.db = db
         self.discord_id = discord_id
         self.modal_class = modal_class
+        self.database = db
 
         # Select menu para posição
         options = [
@@ -61,22 +61,22 @@ class ProfileView(discord.ui.View):
 
     async def change_position(self, interaction: discord.Interaction):
         new_pos = self.position_select.values[0]
-        self.db.update_profile(self.discord_id, position=new_pos)
+        self.database.update_profile(self.discord_id, position=new_pos)
         await interaction.response.send_message(
             f"✅ Posição alterada para **{new_pos}**", ephemeral=True
         )
 
     async def toggle_police(self, interaction: discord.Interaction):
-        row = self.db.get_user(self.discord_id)
+        row = self.database.get_user(self.discord_id)
         new_status = 0 if row["is_police"] else 1
-        self.db.update_profile(self.discord_id, is_police=new_status)
+        self.database.update_profile(self.discord_id, is_police=new_status)
         status_text = "🚓 Sim" if new_status else "Não"
         await interaction.response.send_message(
             f"✅ Polícia: {status_text}", ephemeral=True
         )
 
     async def open_modal(self, interaction: discord.Interaction):
-        row = self.db.get_user(self.discord_id)
+        row = await self.database.get_user(self.discord_id)
         modal = self.modal_class(self.db, self.discord_id, row)
         await interaction.response.send_modal(modal)
 
@@ -99,7 +99,7 @@ class ProfileEditModal(discord.ui.Modal, title="Editar Perfil"):
         self.add_item(self.gender)
 
     async def on_submit(self, interaction: discord.Interaction):
-        self.db.update_profile(
+        self.database.update_profile(
             self.discord_id,
             name=self.name.value or None,
             bio=self.bio.value or None,
@@ -112,15 +112,15 @@ class Profile(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="perfil", description="Mostra ou edita o perfil de alguém")
+    @app_commands.command(name="perfil_v2", description="Mostra ou edita o perfil de alguém")
     @app_commands.describe(editar="Mostra botões para editar o teu perfil", user="Outro utilizador")
     @app_commands.guilds(discord.Object(id=GUILD_ID))
     async def profile(self, interaction: discord.Interaction, editar: bool = False, user: discord.User | None = None):
-        db = self.bot.db
+        db = self.bot.database
         target = user or interaction.user
         target_id = str(target.id)
 
-        row = db.get_user(target_id)
+        row = await self.database.get_user(target_id)
         position = row["position"] or "Desconhecida"
         color = get_color_by_position(position)
         embed = discord.Embed(
