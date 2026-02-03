@@ -118,6 +118,8 @@ __pypackages__/
 # Celery stuff
 celerybeat-schedule
 celerybeat.pid
+database/database.db
+quem_joga_hoje.json
 
 # SageMath parsed files
 *.sage.py
