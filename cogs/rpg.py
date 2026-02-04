@@ -22,7 +22,7 @@ class RPG(commands.Cog):
     # PERFIL
     # ======================
     @commands.hybrid_command(
-        name="perfil",
+        name="perfil_old",
         description="Mostra o teu perfil e settings, permite alterar alguns."
     )
     @app_commands.guilds(discord.Object(id=GUILD_ID))

@@ -24,7 +24,7 @@ class KanyeSays(commands.Cog):
                 return data["quote"]
 
     @commands.hybrid_command(
-        name="kanye",
+        name="ye",
         description="Kanye says something profundamente Kanye"
     )
     @app_commands.guilds(discord.Object(id=GUILD_ID))

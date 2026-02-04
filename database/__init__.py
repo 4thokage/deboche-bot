@@ -73,26 +73,33 @@ class DatabaseManager:
                 await self.connection.commit()
         return await self.get_user(discord_id)
 
-    async def update_user_settings(self, discord_id: int, **kwargs):
-        user = await self.connection.execute("SELECT id FROM users WHERE discord_id=?", (str(discord_id),))
+    async def update_profile(self, discord_id: str, **kwargs):
+        # First, find the user ID in the table
+        user = await self.connection.execute(
+            "SELECT id FROM users WHERE discord_id=?", (discord_id,)
+        )
         async with user as cursor:
             row = await cursor.fetchone()
             if not row:
                 return False
             user_id = row[0]
 
-        allowed_fields = ["language", "notifications_enabled", "sound_enabled", "dark_mode",
-                          "auto_reply_enabled", "daily_reminder_enabled", "trade_alerts_enabled"]
+        # Only allow these fields to be updated
+        allowed_fields = ["name", "bio", "zone", "gender", "position", "is_police"]
         fields = []
         values = []
+
         for k, v in kwargs.items():
             if k in allowed_fields:
                 fields.append(f"{k}=?")
                 values.append(v)
+
         if not fields:
-            return False
-        query = f"UPDATE user_settings SET {', '.join(fields)} WHERE user_id=?"
+            return False  # nothing to update
+
+        query = f"UPDATE users SET {', '.join(fields)} WHERE id=?"
         values.append(user_id)
+
         await self.connection.execute(query, tuple(values))
         await self.connection.commit()
         return True

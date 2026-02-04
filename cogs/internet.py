@@ -1,26 +1,55 @@
-import os
-import re
 import aiohttp
+
 import discord
-import datetime
-from discord import app_commands
 from discord.ext import commands
-from urllib.parse import quote
-from io import BytesIO
+from discord import app_commands
 from config import GUILD_ID
 
+XKCD_LATEST_API = "https://xkcd.com/info.0.json"
 
-class Data(commands.Cog):
-    """Cog com comandos que obtem dados."""
+
+class Internet(commands.Cog):
+    """Comic diário do XKCD"""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        if not hasattr(bot, "session"):
-            self.bot.session = aiohttp.ClientSession()
 
-    # --------------------------
-    # Screenshot de website
-    # --------------------------
+    async def fetch_latest_comic(self) -> dict:
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=5)
+        ) as session:
+            async with session.get(XKCD_LATEST_API) as resp:
+                if resp.status != 200:
+                    raise RuntimeError("XKCD API falhou")
+                return await resp.json()
+
+    @commands.hybrid_command(
+        name="xkcd",
+        description="Mostra o comic diário do XKCD"
+    )
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    async def xkcd(self, ctx: commands.Context):
+        try:
+            comic = await self.fetch_latest_comic()
+
+            embed = discord.Embed(
+                title=f"XKCD #{comic['num']} — {comic['title']}",
+                description=comic.get("alt", ""),
+                color=0xFFFFFF,
+                url=f"https://xkcd.com/{comic['num']}/"
+            )
+
+            embed.set_image(url=comic["img"])
+
+            embed.set_footer(
+                text=f"{comic['day']}/{comic['month']}/{comic['year']}"
+            )
+
+            await ctx.send(embed=embed)
+
+        except Exception:
+            await ctx.send("❌ Não consegui buscar o XKCD de hoje.")
+
     @app_commands.command(
         name="ss",
         description="Tira uma screenshot de um website"
@@ -148,76 +177,6 @@ class Data(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"❌ Erro ao obter informações do Pokémon: {e}")
 
-    @app_commands.command(
-        name="wiki",
-        description="Busca informações de um item, NPC ou boss da OSRS Wiki."
-    )
-    @app_commands.describe(
-        query="Nome do item, NPC ou boss."
-    )
-    @app_commands.guilds(discord.Object(id=int(os.getenv("GUILD_ID"))))
-    async def wiki(self, interaction: discord.Interaction, query: str):
-        await interaction.response.defer(thinking=True)
-
-        url = "https://oldschool.runescape.wiki/api.php"
-        params = {
-            "action": "query",
-            "format": "json",
-            "titles": query.replace(" ", "_"),
-            "prop": "extracts|pageimages",
-            "exintro": "1",      # <-- changed from True to "1"
-            "explaintext": "1",  # <-- changed from True to "1"
-            "piprop": "original"
-        }
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params) as resp:
-                    data = await resp.json()
-
-            print(data)
-            pages = data["query"]["pages"]
-            page = next(iter(pages.values()))
-            if "missing" in page:
-                return await interaction.followup.send(f"❌ Página **{query}** não encontrada na OSRS Wiki.")
-
-            title = page["title"]
-            extract = page.get("extract", "Sem resumo disponível.")
-            image_url = page.get("original", {}).get("source")
-
-            embed = discord.Embed(title=title, description=extract, color=discord.Color.green())
-            if image_url:
-                embed.set_thumbnail(url=image_url)
-
-            await interaction.followup.send(embed=embed)
-
-        except Exception as e:
-            await interaction.followup.send(f"❌ Erro ao consultar OSRS Wiki: `{e}`")
-
-    @commands.hybrid_command(name="wiki")
-    async def wiki_text(self, ctx: commands.Context, *, query: str):
-        class DummyInteraction:
-            def __init__(self, ctx):
-                self.ctx = ctx
-
-            @property
-            def response(self):
-                return self
-
-            async def defer(self, thinking=True):
-                await self.ctx.send("⏳ Buscando na OSRS Wiki...")
-
-            async def followup(self, send=None, **kwargs):
-                if send:
-                    await self.ctx.send(send)
-                elif "content" in kwargs:
-                    await self.ctx.send(kwargs["content"])
-
-            async def followup_send(self, content):
-                await self.ctx.send(content)
-
-        fake_interaction = DummyInteraction(ctx)
-        await self.wiki.__func__(self, fake_interaction, query)
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(Data(bot))
+    await bot.add_cog(Internet(bot))

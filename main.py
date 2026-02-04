@@ -149,7 +149,7 @@ class DiscordBot(commands.Bot):
         print('Bot ready.')
         
     async def on_presence_update(self, before: discord.Member, after: discord.Member):
-        self.logger.info(f"PRESENCE UPDATE: {after}")
+        self.logger.info(f"PRESENCE UPDATE: {after.guild}")
         if not after.guild:
             return
 
