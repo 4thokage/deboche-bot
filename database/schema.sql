@@ -106,3 +106,12 @@ CREATE TABLE IF NOT EXISTS gaming_totals (
     total_duration INTEGER NOT NULL,
     PRIMARY KEY (user_id, server_id, game_name)
 );
+
+-- Tabela de uso de comandos
+CREATE TABLE IF NOT EXISTS command_usage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_id TEXT NOT NULL,       -- ID do user
+    command_name TEXT NOT NULL,     -- nome do comando
+    usage_count INTEGER DEFAULT 0,  -- vezes usadas
+    UNIQUE(discord_id, command_name)
+);

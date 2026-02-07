@@ -17,6 +17,7 @@ from cogwatch import watch
 from database import DatabaseManager
 from config import TOKEN
 from config import PREFIX
+import time
 
 
 load_dotenv()
@@ -146,60 +147,13 @@ class DiscordBot(commands.Bot):
 
     @watch(path='cogs', preload=True)
     async def on_ready(self):
-        print('Bot ready.')
-        
-    async def on_presence_update(self, before: discord.Member, after: discord.Member):
-        self.logger.info(f"PRESENCE UPDATE: {after.guild}")
-        if not after.guild:
-            return
-
-        user_id = after.id
-        guild_id = after.guild.id
-
-        def get_game(member):
-            for activity in member.activities:
-                if activity.type == discord.ActivityType.playing:
-                    return activity.name
-            return None
-
-        before_game = get_game(before)
-        after_game = get_game(after)
-
-        now = int(time.time())
-
-        # Started playing
-        if not before_game and after_game:
-            self.active_sessions[user_id] = {
-                "game": after_game,
-                "started_at": now,
-                "guild_id": guild_id,
-            }
-
-        # Stopped playing or changed game
-        if before_game and (before_game != after_game):
-            session = self.active_sessions.pop(user_id, None)
-            if session:
-                await self.bot.database.add_gaming_session(
-                    user_id=user_id,
-                    guild_id=guild_id,
-                    game_name=session["game"],
-                    started_at=session["started_at"],
-                    ended_at=now,
-                )
-
-            # Started a new game immediately
-            if after_game:
-                self.active_sessions[user_id] = {
-                    "game": after_game,
-                    "started_at": now,
-                    "guild_id": guild_id,
-                }
+        self.logger.info('Bot ready.')
 
     @tasks.loop(minutes=4.0)
     async def status_task(self) -> None:
         estados = [
-            "Olá 👋",
-            "Sou um bot 🤖",
+            "Empregado do mes: King Nothing👋",
+            "Pior chefe: Born This Way 💩",
             "A fazer cenas fixes 😎",
         ]
         await self.change_presence(
@@ -252,23 +206,21 @@ class DiscordBot(commands.Bot):
         await self.process_commands(message)
 
     async def on_command_completion(self, context: Context) -> None:
-        """
-        The code in this event is executed every time a normal command has been *successfully* executed.
-
-        :param context: The context of the command that has been executed.
-        """
         full_command_name = context.command.qualified_name
-        split = full_command_name.split(" ")
-        executed_command = str(split[0])
+        executed_command = full_command_name.split(" ")[0]
+        
+        # incrementa global counter
         await self.database.increment_commands_count(context.author.id)
-        if context.guild is not None:
+        
+        # incrementa counter por comando
+        await self.database.increment_command_usage(context.author.id, executed_command)
+
+        if context.guild:
             self.logger.info(
-                f"Executed {executed_command} command in {context.guild.name} (ID: {context.guild.id}) by {context.author} (ID: {context.author.id})"
+                f"Executed {executed_command} in {context.guild.name} by {context.author}"
             )
         else:
-            self.logger.info(
-                f"Executed {executed_command} command by {context.author} (ID: {context.author.id}) in DMs"
-            )
+            self.logger.info(f"Executed {executed_command} by {context.author} in DMs")
         
     async def on_command_error(self, context: Context, error) -> None:
         """

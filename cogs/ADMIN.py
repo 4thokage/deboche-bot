@@ -334,6 +334,34 @@ class ADMIN(commands.Cog, name="admin"):
         await context.send(file=f)
         os.remove(log_file)
         
+    @app_commands.command(
+        name="stats",
+        description="Mostra estatísticas de uso dos comandos"
+    )
+    @app_commands.describe(
+        least="Mostrar os comandos menos usados em vez dos mais usados"
+    )
+    @app_commands.guilds(discord.Object(GUILD_ID))
+    async def stats(self, interaction: discord.Interaction, least: bool = False):
+        await interaction.response.defer()
+        top_commands = await self.bot.database.get_command_stats(limit=20, ascending=least)
+
+        if not top_commands:
+            return await interaction.followup.send("Nenhum comando registado ainda.")
+
+        description = "\n".join(f"**{name}** → {count} usos" for name, count in top_commands)
+        title = "Comandos menos usados" if least else "Comandos mais usados"
+
+        embed = discord.Embed(
+            title=title,
+            description=description,
+            color=0x00FF00
+        )
+        await interaction.followup.send(embed=embed)
+
+    async def setup(bot: commands.Bot):
+        await bot.add_cog(Stats(bot))
+        
     @app_commands.command(name="perfil", description="Mostra ou edita o perfil de alguém")
     @app_commands.describe(editar="Mostra botões para editar o teu perfil", user="Outro utilizador")
     @app_commands.guilds(discord.Object(id=GUILD_ID))

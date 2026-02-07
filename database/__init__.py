@@ -148,6 +148,34 @@ class DatabaseManager:
         level = int((xp / 10) ** 0.5)
         return level
 
+    async def increment_command_usage(self, discord_id: int, command_name: str) -> None:
+        """Incrementa contador de uso do comando por user."""
+        query = """
+        INSERT INTO command_usage (discord_id, command_name, usage_count)
+        VALUES (?, ?, 1)
+        ON CONFLICT(discord_id, command_name)
+        DO UPDATE SET usage_count = usage_count + 1
+        """
+        async with self.connection.execute(query, (str(discord_id), command_name)):
+            await self.connection.commit()
+            
+    async def get_command_stats(self, limit: int = 20, ascending: bool = False):
+        """
+        Retorna estatísticas de todos os comandos, agregados por comando.
+        :param limit: top N comandos
+        :param ascending: True = menos usados primeiro
+        """
+        order = "ASC" if ascending else "DESC"
+        query = f"""
+        SELECT command_name, SUM(usage_count) as total
+        FROM command_usage
+        GROUP BY command_name
+        ORDER BY total {order}
+        LIMIT ?
+        """
+        rows = await self.connection.execute(query, (limit,))
+        async with rows as cursor:
+            return await cursor.fetchall()  # [(command_name, total), ...]
     # ===============================
     # QUESTS
     # ===============================

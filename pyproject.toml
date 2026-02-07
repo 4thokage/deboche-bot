@@ -15,6 +15,7 @@ dependencies = [
   "yt-dlp",
   "PyNaCl",
   "google-genai",
+  "selectolax",
   "aiosqlite"
 ]
 
