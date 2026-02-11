@@ -181,9 +181,6 @@ class DiscordBot(commands.Bot):
         await self.init_db()
         # await self.load_cogs()
         
-        for guild in self.guilds:
-            await guild.chunk()
-
         try:
             await self.load_extension("jishaku")
             self.logger.info("Loaded extension 'jishaku'")
