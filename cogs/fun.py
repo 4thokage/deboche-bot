@@ -253,7 +253,53 @@ class Fun(commands.Cog):
         except Exception:
             await ctx.send("❌ O universo não conseguiu decidir (não).")
 
+    @commands.hybrid_command(name="owen_wilson")
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    async def owen_wilson(self, ctx: commands.Context):
+        url = "https://owen-wilson-wow-api.onrender.com/wows/random"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return await ctx.send("Failed to fetch a wow 😢")
+                data = await resp.json()
+        
+        if not data or len(data) == 0:
+            return await ctx.send("No wow found 😢")
 
+        wow = data[0]  # API returns a list with a single dict
+
+        embed = discord.Embed(
+            title=f"{wow['movie']} ({wow['year']})",
+            description=f"**Character:** {wow['character']}\n**Director:** {wow['director']}\n**Timestamp:** {wow['timestamp']}\n**Line:** {wow['full_line']}",
+            color=discord.Color.green()
+        )
+        embed.set_thumbnail(url=wow['poster'])
+        embed.add_field(name="Movie Duration", value=wow['movie_duration'])
+        embed.add_field(name="Wow Count", value=f"{wow['current_wow_in_movie']} of {wow['total_wows_in_movie']}")
+        embed.add_field(name="Video 1080p", value=f"[Click Here]({wow['video']['1080p']})", inline=False)
+        embed.add_field(name="Audio", value=f"[Click Here]({wow['audio']})", inline=False)
+
+        await ctx.send(embed=embed)
+        
+    @app_commands.command(name="shrek", description="Get a random Shrek quote")
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    async def shrek(self, interaction: discord.Interaction):
+        url = "https://shrekofficial.com/quotes/random"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    await interaction.response.send_message("Failed to fetch a Shrek quote 😢", ephemeral=True)
+                    return
+                text = await resp.text()
+        
+        # Format the text in a code block to preserve line breaks
+        embed = discord.Embed(
+            title="🟢 Random Shrek Quote",
+            description=f"```\n{text}\n```",
+            color=discord.Color.green()
+        )
+
+        await interaction.response.send_message(embed=embed)
 # ======================
 # SETUP
 # ======================
