@@ -7,29 +7,6 @@ Bot para Discord focado em diversão e moderação no servidor **Deboche**.
 
 ---
 
-## Funcionalidades
-
-- Mostrar e editar perfil de utilizadores
-- Moderação: avisos, purge, arquivar mensagens
-- Comandos de diversão: posts do Reddit, memes, minijogos
-- Sistema de reputação, cervejas e polícia
-- Botões interativos e modais para edição rápida de perfil
-
----
-
-## Comandos principais
-
-| Comando | Descrição |
-|---------|-----------|
-| `/perfil` | Mostra ou edita o teu perfil |
-| `/nick` | Muda o nickname de um utilizador |
-| `/aviso` | Adicionar, remover ou listar avisos |
-| `/purge` | Apaga mensagens do canal |
-| `/arquivo` | Arquiva mensagens em ficheiro |
-| `/reddit` | Mostra um post aleatório de r/PORTUGALCARALHO |
-
----
-
 ## Instalação
 
 ```bash
